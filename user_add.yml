@@ -1,0 +1,48 @@
+---
+- hosts: app
+  vars:
+    u_name: "deployer"
+    u_id: 10100
+    u_primary_group: "devops"
+    u_primary_group_id: 20100
+    # created with: how-do-i-generate-crypted-passwords-for-the-user-module
+    u_password: "$6$1FEPrUuKkBq6MyOI$RFaFqEoIydZMKeivABwGypHRGpzwLca/pdvv5xr.MML3.eBtbUK6OX7ecH5kd3.tiwJN6Zjxg9otlQfbGvTaJ1"
+    u_authorized_key: "/home/{{ u_name }}/.ssh/id_rsa" # also this is default way
+    u_home_dir: "/home/{{ u_name }}" # also this is default way
+  gather_facts: false
+  tasks:
+    - name: Ensure group "{{ u_primary_group }}" exists
+      group:
+        name: "{{ u_primary_group }}"
+        gid: "{{ u_primary_group_id }}"
+        state: present
+      become: true
+      become_user: root
+
+    - name: Create user "{{u_name}}"
+      user: 
+        name: "{{ u_name }}" 
+        password: "{{ u_password }}"
+        uid: "{{ u_id }}" 
+        group: "{{ u_primary_group }}"
+        home: "{{ u_home_dir }}" 
+        ssh_key_file: "{{ u_authorized_key }}"
+        generate_ssh_key: yes
+        state: present
+      become: true
+      become_user: root
+
+    - name: Ensure sudoers.d is enabled
+      lineinfile: dest=/etc/sudoers state=present backup=yes regexp='^#includedir /etc/sudoers.d' line='#includedir /etc/sudoers.d'
+      become: true
+      become_user: root
+
+    - name: Set up requiretty-less sudo for user
+      copy: 
+        content: "Defaults:{{ u_name }} !requiretty" 
+        dest: "/etc/sudoers.d/{{ u_name }}" 
+        owner: "{{ u_name }}" 
+        group: "{{ u_primary_group }}" 
+        mode: 0440
+      become: true
+      become_user: root
