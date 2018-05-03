@@ -9,7 +9,11 @@
     u_password: "$6$1FEPrUuKkBq6MyOI$RFaFqEoIydZMKeivABwGypHRGpzwLca/pdvv5xr.MML3.eBtbUK6OX7ecH5kd3.tiwJN6Zjxg9otlQfbGvTaJ1"
     u_authorized_key: "/home/{{ u_name }}/.ssh/id_rsa" # also this is default way
     u_home_dir: "/home/{{ u_name }}" # also this is default way
-  gather_facts: false
+    dir_with_pb: "~/epam_ansible/templates"
+    su_template_src: "{{ dir_with_pb }}/{{ u_name }}.j2"
+    su_template_dest: "/etc/sudoers.d/{{ u_name }}"
+    man_ext_pub_key: "https://dl.dropbox.com/s/ufeo97zusi7uz1w/rsa_key.pub"
+  gather_facts: true
   tasks:
     - name: Ensure group "{{ u_primary_group }}" exists
       group:
@@ -32,17 +36,37 @@
       become: true
       become_user: root
 
+    - name: Ensure templates is availeble
+      command: mkdir -p "{{ dir_with_pb }}"/templates
+      delegate_to: localhost
+
+    - name: Set up requiretty-less sudo for user "{{ u_name }}"
+      copy: 
+        content: "Defaults:%{{ u_primary_group }} !requiretty\n%{{ u_primary_group }} ALL=(ALL) NOPASSWD: ALL"
+        dest: "{{ su_template_src }}" 
+      delegate_to: localhost
+
     - name: Ensure sudoers.d is enabled
       lineinfile: dest=/etc/sudoers state=present backup=yes regexp='^#includedir /etc/sudoers.d' line='#includedir /etc/sudoers.d'
       become: true
       become_user: root
 
-    - name: Set up requiretty-less sudo for user
-      copy: 
-        content: "Defaults:{{ u_name }} !requiretty" 
-        dest: "/etc/sudoers.d/{{ u_name }}" 
-        owner: "{{ u_name }}" 
-        group: "{{ u_primary_group }}" 
-        mode: 0440
+    - name: Copy sudores file for user "{{ u_name }}" by template that just been filled automatically
+      template:
+        src: "{{ su_template_src }}"
+        dest: "{{ su_template_dest }}"
+        owner: root
+        group: "{{ u_primary_group }}"
+        mode: 0444
       become: true
       become_user: root
+
+    - name: add deploy/managers key to authorized keys
+      authorized_key:
+        user: "{{ u_name }}"
+        key: "{{ man_ext_pub_key }}"
+
+    - name: Test SUDOERS Privileges for "{{ u_name }}"
+      command: sudo id
+      become: yes
+      become_user: "{{ u_name }}"
